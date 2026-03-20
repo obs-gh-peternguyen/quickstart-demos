@@ -1,0 +1,58 @@
+name: vcenter-vsphere-demo
+
+services:
+  vcenter-simulator:
+    container_name: vcenter-simulator
+    image: vmware/vcsim:latest
+    platform: linux/amd64
+    ports:
+      - "8989:8989"
+
+  otelcol-contrib-vcsim:
+    container_name: otelcol-contrib
+    image: otel/opentelemetry-collector-contrib:latest
+    platform: linux/amd64
+    ports:
+      - "4318:4318"
+    environment:
+      - OBSERVE_ID=${OBSERVE_ID}
+      - OBSERVE_TOKEN=${OBSERVE_TOKEN}
+    configs:
+      - source: otel-config
+        target: /etc/otelcol-contrib/config.yaml
+    depends_on:
+      - vcenter-simulator
+
+configs:
+  otel-config:
+    content: |
+      receivers:
+        vcenter:
+          endpoint: https://vcenter-simulator:8989
+          tls:
+            insecure: true
+          username: user
+          password: pass
+          collection_interval: 1m
+          initial_delay: 1s
+
+      exporters:
+        otlp_http/observe/metrics:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: Metrics
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+
+      service:
+        pipelines:
+          metrics:
+            receivers: [vcenter]
+            exporters: [otlp_http/observe/metrics]
