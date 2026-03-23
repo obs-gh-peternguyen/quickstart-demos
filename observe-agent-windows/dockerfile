@@ -1,0 +1,32 @@
+# Base image
+FROM mcr.microsoft.com/windows/servercore:ltsc2025
+
+# Expose required ports
+EXPOSE 1888 8888 8889 13133 4317 4318 55679
+
+# Environment variables
+ENV OBSERVE_TOKEN=""
+ENV OBSERVE_COLLECTION_ENDPOINT=""
+
+RUN mkdir "C:\ProgramData\Observe\observe-agent\filestorage"
+
+# Create working directory
+WORKDIR "C:/Program Files/Observe/observe-agent/"
+
+# Download Observe Agent ZIP
+ADD https://github.com/observeinc/observe-agent/releases/download/v2.14.0/observe-agent_Windows_x86_64.zip .
+
+# Extract ZIP
+RUN tar -xf observe-agent_Windows_x86_64.zip
+
+# RUN move observe-agent.yaml "C:\Program Files\Observe\observe-agent\observe-agent.yaml"
+
+RUN echo @echo off > entrypoint.cmd && \
+    echo observe-agent.exe init-config --token %OBSERVE_TOKEN% --observe_url %OBSERVE_COLLECTION_ENDPOINT% >> entrypoint.cmd && \
+    echo observe-agent.exe start >> entrypoint.cmd
+
+# Set entrypoint
+ENTRYPOINT ["cmd", "/c", "entrypoint.cmd"]
+
+# docker run --name observe-agent -dp 4318:4318 -e OBSERVE_TOKEN="<tokenId>:<token>" -e OBSERVE_COLLECTION_ENDPOINT="https://<id>.collect.observeinc.com" observe-agent:windows-servercore
+# Data is in the Logs > OpenTelemetery Logs (Host Explorer) and Metrics > Host Explorer (Prometheus Metrics) > system_<metric Name>
