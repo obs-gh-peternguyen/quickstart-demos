@@ -1,3 +1,5 @@
+# docker compose -f ./docker-compose_vcenter.yaml up -d
+
 name: vcenter-vsphere-demo
 
 services:
@@ -7,9 +9,10 @@ services:
     platform: linux/amd64
     ports:
       - "8989:8989"
+    command: -l :8989 -dc 2 -folder 1 -ds 4 -pod 1 -nsx 2 -pool 2 -app 1 -vm 4
 
-  otelcol-contrib-vcsim:
-    container_name: otelcol-contrib
+  otelcol-contrib:
+    container_name: otelcol-contrib-vcsim
     image: otel/opentelemetry-collector-contrib:latest
     platform: linux/amd64
     ports:
@@ -34,7 +37,7 @@ configs:
           username: user
           password: pass
           collection_interval: 1m
-          initial_delay: 1s
+          initial_delay: 2s
 
       exporters:
         otlp_http/observe/metrics:
