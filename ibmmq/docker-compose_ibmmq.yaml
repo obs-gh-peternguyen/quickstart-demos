@@ -1,0 +1,74 @@
+# docker compose -f ./docker-compose_ibmmq.yaml up -d
+
+name: ibmmq-demo
+
+services:
+  ibmmq-qm1:
+    container_name: ibmmq-qm1
+    image: icr.io/ibm-messaging/mq:9.4.5.0-r2
+    platform: linux/amd64
+    environment:
+      - LICENSE=accept
+      - MQ_QMGR_NAME=QM1
+      - MQ_ENABLE_METRICS=true
+    ports:
+      - "9157:9157"
+
+  ibmmq-qm2:
+    container_name: ibmmq-qm2
+    image: icr.io/ibm-messaging/mq:9.4.5.0-r2
+    platform: linux/amd64
+    environment:
+      - LICENSE=accept
+      - MQ_QMGR_NAME=QM2
+      - MQ_ENABLE_METRICS=true
+    ports:
+      - "9158:9157"
+
+  otelcol:
+    container_name: otelcol-ibmmq
+    image: otel/opentelemetry-collector:latest
+    ports:
+      - "4318:4318"
+    environment:
+      - OBSERVE_ID=${OBSERVE_ID}
+      - OBSERVE_TOKEN=${OBSERVE_TOKEN}
+    configs:
+      - source: otel-config
+        target: /etc/otelcol/config.yaml
+    depends_on:
+      - ibmmq-qm1
+      - ibmmq-qm2
+
+configs:
+  otel-config:
+    content: |
+      receivers:
+        prometheus:
+          config:
+            scrape_configs:
+              - job_name: 'ibmmq'
+                scrape_interval: 10s
+                static_configs:
+                  - targets: ['ibmmq-qm1:9157', 'ibmmq-qm2:9157']
+
+      exporters:
+        otlp_http/observe/metrics:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: Metrics
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+
+      service:
+        pipelines:
+          metrics:
+            receivers: [prometheus]
+            exporters: [otlp_http/observe/metrics]
