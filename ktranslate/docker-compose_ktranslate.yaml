@@ -1,0 +1,97 @@
+name: ktranslate-demo
+
+services:
+  ktranslate:
+    container_name: ktranslate
+    image: kentik/ktranslate:v2
+    platform: linux/amd64
+    volumes:
+      - type: bind
+        source: /Users/username/Applications/otel/snmp.yaml
+        target: /snmp.yaml
+    ports:
+      - 1620:1620/udp
+    command:
+      - --format=otel
+      - --otel.protocol=http
+      - --otel.endpoint=http://otelcol-ktranslate:4318
+      - --snmp=/snmp.yaml
+      - --sinks=otel
+      - --metrics=jchf
+      - --tee_logs=true
+      - --service_name=snmp
+      - --snmp_discovery_on_start=true
+      - --snmp_discovery_min=720
+  otelcol:
+    container_name: otelcol-ktranslate
+    image: otel/opentelemetry-collector:latest
+    ports:
+      - "4318:4318"
+    environment:
+      - OBSERVE_ID=${OBSERVE_ID}
+      - OBSERVE_TOKEN=${OBSERVE_TOKEN}
+    configs:
+      - source: otel-config
+        target: /etc/otelcol/config.yaml
+
+configs:
+  otel-config:
+    content: |
+      receivers:
+        otlp:
+          protocols:
+            http:
+              endpoint: 0.0.0.0:4318
+
+      exporters:
+        otlp_http/observe/metrics:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: "Metrics"
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+        otlp_http/observe/traces:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: "Tracing"
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+        otlp_http/observe/logs:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: "Host Explorer"
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+
+      service:
+        pipelines:
+          metrics:
+            receivers: [otlp]
+            exporters: [otlp_http/observe/metrics]
+          traces:
+            receivers: [otlp]
+            exporters: [otlp_http/observe/traces]
+          logs:
+            receivers: [otlp]
+            exporters: [otlp_http/observe/logs]
