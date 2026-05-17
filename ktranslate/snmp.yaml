@@ -1,4 +1,13 @@
-devices: {}
+devices:
+    192.168.0.132:
+        device_name: Xerox WorkCentre 6015NI
+        device_ip: 192.168.0.101
+        snmp_comm: public
+        use_snmp_v1: false
+        mib_profile: '!workcentre.yml'
+        timeout_ms: 5000
+        retries: 5
+        no_use_bulkwalkall: true
 discovery:
     cidrs:
         - 192.168.0.100/32
