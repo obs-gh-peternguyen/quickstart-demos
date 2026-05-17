@@ -1,0 +1,99 @@
+# docker compose -f ./docker-compose_postgresql.yml up -d
+# Run this SQL after Postgres starts to get Top Queries: CREATE EXTENSION IF NOT EXISTS pg_stat_statements
+name: postgres-demo
+
+services:
+  postgresql:
+    image: postgres
+    container_name: postgresql
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    command: postgres -c shared_preload_libraries=pg_stat_statements
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  otelcol-contrib-postgres:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otelcol-contrib-postgres
+    ports:
+      - "4318:4318"
+    environment:
+      - OBSERVE_ID=${OBSERVE_ID}
+      - OBSERVE_TOKEN=${OBSERVE_TOKEN}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    configs:
+      - source: otel-config
+        target: /etc/otelcol-contrib/config.yaml
+    command:
+      - --config=file:/etc/otelcol-contrib/config.yaml
+      - --feature-gates=receiver.postgresql.separateSchemaAttr
+    depends_on:
+      postgresql:
+        condition: service_healthy
+
+configs:
+  otel-config:
+    content: |
+      receivers:
+        postgresql:
+          endpoint: postgresql:5432
+          username: $${env:POSTGRES_USER}
+          password: $${env:POSTGRES_PASSWORD}
+          collection_interval: 10s
+          tls:
+            insecure: true
+          events:
+            db.server.query_sample:
+              enabled: true
+            db.server.top_query:
+              enabled: true
+          query_sample_collection:
+            max_rows_per_query: 100
+          top_query_collection:
+            max_rows_per_query: 100
+            top_n_query: 100
+            collection_interval: 60s
+
+      exporters:
+        otlp_http/observe/metrics:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: "Metrics"
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+        otlp_http/observe/logs:
+          compression: zstd
+          endpoint: https://$${env:OBSERVE_ID}.collect.observeinc.com/v2/otel
+          headers:
+            authorization: Bearer $${env:OBSERVE_TOKEN}
+            x-observe-target-package: "Host Explorer"
+          retry_on_failure:
+            enabled: true
+            initial_interval: 1s
+            max_elapsed_time: 5m
+            max_interval: 30s
+          sending_queue:
+            enabled: true
+
+      service:
+        pipelines:
+          metrics:
+            receivers: [postgresql]
+            exporters: [otlp_http/observe/metrics]
+          logs:
+            receivers: [postgresql]
+            exporters: [otlp_http/observe/logs]
