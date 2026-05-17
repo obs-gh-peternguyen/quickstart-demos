@@ -1,3 +1,5 @@
+# docker compose -f ./docker-compose_ktranslate.yaml up -d   
+
 name: ktranslate-demo
 
 services:
@@ -9,6 +11,9 @@ services:
       - type: bind
         source: /Users/username/Applications/otel/snmp.yaml
         target: /snmp.yaml
+      - type: bind
+        source: /mnt/d/Desktop/ktranslate/workcentre.yml
+        target: /etc/ktranslate/profiles/kentik_snmp/xerox/workcentre.yml
     ports:
       - 1620:1620/udp
     command:
